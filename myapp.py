@@ -7,79 +7,54 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
-# Məlumatları yükləyin və göstərin
-məlumat = pd.read_csv('500_Person_Gender_Height_Weight_Index.csv')
-print(məlumat.describe())
+# Load data
+data = pd.read_csv('500_Person_Index.csv')
 
-def index_adi_ver(ind):
-    if ind==0:
-        return 'Aşırı Zayıf'
-    elif ind==1:
-        return 'Zayıf'
-    elif ind==2:
-        return 'Normal'
-    elif ind==3:
-        return 'Fazla Kilolu'
-    elif ind==4:
-        return 'Obezite'
-    elif ind==5:
-        return 'Aşırı Obez'
+def map_index_to_category(index):
+    categories = ['Extremely Weak', 'Weak', 'Normal', 'Overweight', 'Obesity', 'Extremely Obese']
+    return categories[index]
 
-məlumat['Index'] = məlumat['Index'].apply(index_adi_ver)
 
-sns.lmplot('Boy', 'Çəki', məlumat, hue='Index', size=7, aspect=1, fit_reg=False)
+data['Index'] = data['Index'].apply(map_index_to_category)
 
-cins = məlumat['Cinsiyət'].value_counts()
-kateqoriyalar = məlumat['Index'].value_counts()
 
-# KİŞİLƏR ÜÇÜN STATİSTİKA
-məlumat[məlumat['Cinsiyət']=='Kişi']['Index'].value_counts()
+sns.lmplot('Height', 'Weight', data, hue='Index', size=7, aspect=1, fit_reg=False)
 
-# QADINLAR ÜÇÜN STATİSTİKA
-məlumat[məlumat['Cinsiyət']=='Qadın']['Index'].value_counts()
-
-məlumat2 = pd.get_dummies(məlumat['Cinsiyət'])
-məlumat.drop('Cinsiyət', axis=1, inplace=True)
-məlumat = pd.concat([məlumat, məlumat2], axis=1)
-
-y = məlumat['Index']
-məlumat = məlumat.drop(['Index'], axis=1)
-
+data = pd.get_dummies(data, columns=['Gender'])  # One-hot encoding for gender
+y = data['Index']
+X = data.drop('Index', axis=1)
 scaler = StandardScaler()
-məlumat = scaler.fit_transform(məlumat)
-məlumat = pd.DataFrame(məlumat)
+X_scaled = scaler.fit_transform(X)
 
-X_train, X_test, y_train, y_test = train_test_split(məlumat, y, test_size=0.3, random_state=101)
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=101)
 
 param_grid = {'n_estimators': [100, 200, 300, 400, 500, 600, 700, 800, 1000]}
-grid_cv = GridSearchCV(RandomForestClassifier(random_state=101), param_grid, verbose=3)
+grid_search = GridSearchCV(RandomForestClassifier(random_state=101), param_grid, verbose=3)
+grid_search.fit(X_train, y_train)
 
-grid_cv.fit(X_train, y_train)
+print("Best parameters:", grid_search.best_params_)
 
-print(grid_cv.best_params_)
-# çəki kateqoriyası proqnozu
-pred = grid_cv.predict(X_test)
+y_pred = grid_search.predict(X_test)
+print("Classification Report:\n", classification_report(y_test, y_pred))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("Accuracy:", accuracy_score(y_test, y_pred) * 100)
 
-print(classification_report(y_test, pred))
-print('\n')
-print(confusion_matrix(y_test, pred))
-print('\n')
-print('Dəqiqlik --> ', accuracy_score(y_test, pred)*100)
-print('\n')
+def predict_weight_category(details, model, scaler):
+    gender = details[0]
+    height = details[1]
+    weight = details[2]
 
-def index_proqnozu(məlumatlar):
-    cins = məlumatlar[0]
-    boy = məlumatlar[1]
-    çəki = məlumatlar[2]
-    
-    if cins == 'Kişi':
-        məlumatlar = np.array([[np.float(boy), np.float(çəki), 0.0, 1.0]])
-    elif cins == 'Qadın':
-        məlumatlar = np.array([[np.float(boy), np.float(çəki), 1.0, 0.0]])
-    
-    y_pred = grid_cv.predict(scaler.transform(məlumatlar))
-    return (y_pred[0])
+    gender_encoded = {'Male': [1, 0], 'Female': [0, 1]}
+    gender_vector = gender_encoded[gender]
+    details_array = np.array([[height, weight] + gender_vector])
+    scaled_details = scaler.transform(details_array)
+    prediction = model.predict(scaled_details)
+    return prediction[0]
 
-# Canlı proqnoz
-sizin_məlumatlarınız = ['Kişi', 175, 80]
-print(index_proqnozu(sizin_məlumatları))
+your_details = ['Male', 175, 80]
+print("Predicted weight category:", predict_weight_category(your_details, grid_search, scaler))
+
+
+
+
